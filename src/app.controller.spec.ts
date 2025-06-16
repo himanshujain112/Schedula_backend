@@ -14,9 +14,15 @@ describe('AppController', () => {
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('GET /', () => {
+    it('should return "Welcome to the NestJS Boilerplate!"', () => {
+      expect(appController.getRoot()).toBe('Welcome to the NestJS Boilerplate!');
+    });
+  });
+
+  describe('GET /hello', () => {
+    it('should return custom hello message', () => {
+      expect(appController.getHello()).toBe('Hello from Saraswat at PearlsThoughts Internship!');
     });
   });
 });
