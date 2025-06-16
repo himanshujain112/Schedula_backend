@@ -1,2 +1,3 @@
-# Schedula_Backend_Data_Disruptors
-Backend Repository for Data Disruptors
+✅ Created a basic NestJS Hello World route using controller & service
+✅ Tested API with Hoppscotch - received expected response
+✅ Ready for review
