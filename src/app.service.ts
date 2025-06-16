@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  getRootMessage(): string {
+    return 'Welcome to the NestJS Boilerplate!';
+  }
+
+  getHelloMessage(): string {
+    return 'Hello from Saraswat at PearlsThoughts Internship!';
   }
 }
