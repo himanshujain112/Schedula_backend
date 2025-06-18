@@ -1,34 +1,33 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Doctor } from './entities/doctor.entity';
 import { Patient } from './entities/patient.entity';
-import { Appointment } from './entities/appointment.entity';
 import { Timeslot } from './entities/timeslot.entity';
+import { Appointment } from './entities/appointment.entity';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST'),
-        port: 5432,
-        username: config.get('DB_USERNAME'),
-        password: config.get('DB_PASSWORD'),
-        database: config.get('DB_NAME'),
-
-        synchronize: true,
-        autoLoadEntities: true,
-      }),
-      inject: [ConfigService],
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
     }),
 
-    TypeOrmModule.forFeature([Doctor, Patient, Appointment, Timeslot]),
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '5432'),
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      synchronize: false, // Set to false due to production best practices
+    }),
+
+    TypeOrmModule.forFeature([Doctor, Patient, Timeslot, Appointment]),
   ],
+
   controllers: [AppController],
   providers: [AppService],
 })
