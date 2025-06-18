@@ -13,32 +13,38 @@ export class Doctor {
   @Column()
   last_name: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: false })
   email: string;
 
-  @Column()
+  @Column({ nullable: false })
+  password: string;
+
+  @Column({ nullable: true })
   phoneNumber: string;
 
-  @Column()
+  @Column({ nullable: true })
   specialization: string;
 
-  @Column()
+  @Column({ type: 'int', default: 0 })
   experience_years: number;
 
-  @Column()
+  @Column({ type: 'text', nullable: true })
   education: string;
 
-  @Column()
+  @Column({ type: 'text', nullable: true })
   clinic_name: string;
 
-  @Column()
+  @Column({ type: 'text', nullable: true })
   clinic_address: string;
 
-  @Column()
+  @Column({ nullable: true })
   available_days: string;
 
-  @Column()
+  @Column({ nullable: true })
   available_time_slots: string;
+
+  @Column({ nullable: true, type: 'text' })
+  hashed_refresh_token: string | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
