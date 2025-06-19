@@ -10,7 +10,8 @@ import { Appointment } from './entities/appointment.entity';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { AuthModule } from './auth/auth.module';
-import { JwtModule } from '@nestjs/jwt';
+import { User } from './entities/user.entity';
+import { ProfileController } from './profile/profile.controller';
 
 @Module({
   imports: [
@@ -30,12 +31,12 @@ import { JwtModule } from '@nestjs/jwt';
       autoLoadEntities: true, // Automatically load entities
     }),
 
-    TypeOrmModule.forFeature([Doctor, Patient, Timeslot, Appointment]),
+    TypeOrmModule.forFeature([Doctor, Patient, User, Timeslot, Appointment]),
 
     AuthModule,
   ],
 
-  controllers: [AppController, AuthController],
+  controllers: [AppController, AuthController, ProfileController],
   providers: [AppService, AuthService],
 })
 export class AppModule {}

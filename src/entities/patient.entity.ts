@@ -1,10 +1,22 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  OneToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Appointment } from './appointment.entity';
+import { User } from './user.entity';
 
 @Entity()
 export class Patient {
   @PrimaryGeneratedColumn()
   patient_id: number;
+
+  @OneToOne(() => User)
+  @JoinColumn({ name: 'user_id' })
+  user: User;
 
   @Column()
   first_name: string;
@@ -12,33 +24,24 @@ export class Patient {
   @Column()
   last_name: string;
 
-  @Column({ unique: true })
-  email: string;
-
-  @Column()
+  @Column({ nullable: true })
   phone_number: string;
 
-  @Column()
+  @Column({ nullable: true })
   gender: string;
 
-  @Column()
+  @Column({ type: 'date', nullable: true })
   dob: Date;
 
-  @Column()
+  @Column({ nullable: true })
   patient_address: string;
 
-  @Column()
+  @Column({ nullable: true })
   emergency_contact: string;
 
-  @Column()
+  @Column({ type: 'text', nullable: true })
   medical_history: string;
 
-  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
-  created_at: Date;
-
-  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
-  updated_at: Date;
-
-  @OneToMany(()=> Appointment, (appointment)=> appointment.patient)
+  @OneToMany(() => Appointment, (appointment) => appointment.patient)
   appointments: Appointment[];
 }
