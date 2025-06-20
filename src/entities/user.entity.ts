@@ -1,4 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Doctor } from './doctor.entity';
+import { Patient } from './patient.entity';
 
 @Entity()
 export class User {
@@ -8,11 +10,14 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column()
-  password: string;
+  @Column({ type: 'text', nullable: true })
+  password: string | null;
 
   @Column({ type: 'enum', enum: ['doctor', 'patient'], default: 'patient' })
   role: 'doctor' | 'patient';
+
+  @Column({ type: 'enum', enum: ['local', 'google'], default: 'local' })
+  provider: 'local' | 'google';
 
   @Column({ type: 'text', nullable: true })
   hashed_refresh_token: string | null;
@@ -22,4 +27,11 @@ export class User {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
+
+  @OneToOne(() => Doctor, (doctor) => doctor.user)
+  doctor: Doctor;
+
+  @OneToOne(() => Patient, (patient) => patient.user)
+  patient: Patient;
+
 }

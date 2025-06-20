@@ -1,14 +1,19 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   Post,
+  Query,
+  Req,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SigninDto } from 'src/dto/signin.dto';
 import { SignupDto } from 'src/dto/signup.dto';
 import { RefreshDto } from 'src/dto/refresh.dto';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('api/v1/auth')
 export class AuthController {
@@ -41,5 +46,23 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Body() dto: RefreshDto) {
     return await this.authService.refresh(dto);
+  }
+
+  // Google OAuth endpoints
+
+  // This endpoint will redirect to Google for authentication
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth(@Query('role') role: string) {
+    // This endpoint will redirect to Google for authentication
+    // The role will be passed as a query parameter
+  }
+
+  // This endpoint will be called by Google after authentication
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(@Req() req) {
+    // user info now in req.user (set by GoogleStrategy)
+    return this.authService.google_login(req.user);
   }
 }

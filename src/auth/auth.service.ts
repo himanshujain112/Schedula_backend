@@ -13,7 +13,6 @@ import { SigninDto } from 'src/dto/signin.dto';
 import { JwtService } from '@nestjs/jwt';
 import { RefreshDto } from 'src/dto/refresh.dto';
 import { User } from 'src/entities/user.entity';
-import e from 'express';
 import { Patient } from 'src/entities/patient.entity';
 
 @Injectable()
@@ -41,7 +40,7 @@ export class AuthService {
     }
     try {
       // hashing the password
-      const hashed_pass = await bcrypt.hash(signupdto.password, 10);
+      const hashed_pass = await bcrypt.hash(signupdto.password as any, 10);
 
       //creating a new user entity
       const user = this.userRepository.create({
@@ -105,8 +104,17 @@ export class AuthService {
       throw new ConflictException(`Email ${dto.email} does not exist`);
     }
 
+    if (user.provider !== 'local') {
+      throw new UnauthorizedException(
+        'Please use Google login for this account',
+      );
+    }
+
     // checking if password is correct
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.password as any,
+    );
     if (!isPasswordValid) {
       throw new ConflictException('Invalid password');
     }
@@ -133,7 +141,7 @@ export class AuthService {
       refresh_token: refresh_token,
     };
   }
-
+  // generate access and refresh tokens
   private async generateTokens(userid: number, email: string, role: string) {
     const payload = { sub: userid, email, role: role };
 
@@ -208,5 +216,80 @@ export class AuthService {
         `Error during token refresh: ${error.message}`,
       );
     }
+  }
+
+  async google_login(profile: any) {
+    const { email, name, role } = profile;
+
+    // Check if user already exists
+    let user = await this.userRepository.findOne({
+      where: { email },
+      relations: ['doctor', 'patient'],
+    });
+
+    // If user exists but is local, reject
+    if (user && user.provider !== 'google') {
+      throw new UnauthorizedException(
+        'Account exists with email/password. Please use local login.',
+      );
+    }
+
+    // If user exists but role mismatch
+    if (user?.role && user.role !== role) {
+      throw new UnauthorizedException(
+        'Role mismatch. Please use the correct login method.',
+      );
+    }
+
+    // If user doesn't exist → create user
+    if (!user) {
+      user = this.userRepository.create({
+        email,
+        provider: 'google',
+        role,
+        password: null,
+      });
+      user = await this.userRepository.save(user);
+
+      // Create role-specific profile
+      if (role === 'doctor') {
+        const doctor = this.doctorRepository.create({
+          user,
+          first_name: name.split(' ')[0],
+          last_name: name.split(' ')[1] || '',
+        });
+        await this.doctorRepository.save(doctor);
+      } else if (role === 'patient') {
+        const patient = this.patientRepository.create({
+          user,
+          first_name: name.split(' ')[0],
+          last_name: name.split(' ')[1] || '',
+        });
+        await this.patientRepository.save(patient);
+      }
+    }
+
+    // Generate tokens
+    const payload = { sub: user.user_id, email: user.email, role: user.role };
+    const accessToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_ACCESS_SECRET,
+      expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '1h',
+    });
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_REFRESH_SECRET,
+      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    });
+
+    // Save hashed refresh token
+    user.hashed_refresh_token = await bcrypt.hash(refreshToken, 10);
+    await this.userRepository.save(user);
+
+    console.log(`User ${user.email} logged in with role: ${user.role}`);
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      role: user.role,
+    };
   }
 }
