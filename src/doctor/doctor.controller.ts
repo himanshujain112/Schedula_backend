@@ -17,8 +17,7 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 @Controller('api/v1/doctors')
 export class DoctorController {
   constructor(private doctorService: DoctorService) {}
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('doctor')
+  @UseGuards(JwtAuthGuard)
   @Get()
   getDoctors(
     @Query('name') name?: string,
@@ -26,8 +25,7 @@ export class DoctorController {
   ) {
     return this.doctorService.getDoctors(name, specialization);
   }
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('doctor')
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   getDoctorByID(@Param('id', ParseIntPipe) id: number) {
     return this.doctorService.getDoctorByID(id);
@@ -42,10 +40,13 @@ export class DoctorController {
   ) {
     return this.doctorService.createAvailability(doctorId, dto);
   }
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('doctor')
+  @UseGuards(JwtAuthGuard)
   @Get(':id/availability')
-  async getAvailability(@Param('id') doctorId: number) {
-    return this.doctorService.getAvailableSlots(doctorId);
+  async getAvailability(
+    @Param('id') doctorId: number,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+  ) {
+    return this.doctorService.getAvailableSlots(doctorId, +page, +limit);
   }
 }

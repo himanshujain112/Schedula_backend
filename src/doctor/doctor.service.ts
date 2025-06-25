@@ -1,8 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateAvailabilityDto } from 'src/dto/availablity.dto';
 import { Doctor } from 'src/entities/doctor.entity';
-import { Repository } from 'typeorm';
+import { MoreThanOrEqual, Repository } from 'typeorm';
 import * as dayjs from 'dayjs';
 import { Timeslot } from 'src/entities/timeslot.entity';
 import { DoctorAvailability } from 'src/entities/doctor_availablity.entity';
@@ -57,7 +61,16 @@ export class DoctorService {
 
     if (!doctor) throw new NotFoundException('Doctor not found');
 
-    // 1. Save availability
+    // ✅ 1. Check if date is in the past
+    const today = dayjs().startOf('day');
+    const requestedDate = dayjs(dto.date);
+    if (requestedDate.isBefore(today)) {
+      throw new BadRequestException(
+        'Cannot create availability for a past date',
+      );
+    }
+
+    // ✅ 2. Save availability record
     const availability = this.availabilityRepo.create({
       doctor,
       date: dto.date,
@@ -69,9 +82,9 @@ export class DoctorService {
 
     const savedAvailability = await this.availabilityRepo.save(availability);
 
-    // 2. Use dayjs to parse times
-    const start = dayjs(`${dto.date}T${dto.start_time}`); // e.g., 2025-06-24T10:00
-    const end = dayjs(`${dto.date}T${dto.end_time}`); // e.g., 2025-06-24T13:00
+    // ✅ 3. Use dayjs to split time
+    const start = dayjs(`${dto.date}T${dto.start_time}`);
+    const end = dayjs(`${dto.date}T${dto.end_time}`);
 
     const slots: Timeslot[] = [];
 
@@ -80,18 +93,29 @@ export class DoctorService {
     while (current.isBefore(end)) {
       const slotTime = current.format('HH:mm');
 
-      const slot = this.slotRepo.create({
-        doctor,
-        availability: savedAvailability,
-        slot_date: dto.date,
-        slot_time: slotTime,
-        is_available: true,
-        session: dto.session,
+      // ✅ 4. Prevent duplicate slot (same doctor + date + time)
+      const existing = await this.slotRepo.findOne({
+        where: {
+          doctor: { doctor_id: doctorId },
+          slot_date: new Date(dto.date),
+          slot_time: slotTime,
+        },
       });
 
-      slots.push(slot);
+      if (!existing) {
+        const slot = this.slotRepo.create({
+          doctor,
+          availability: savedAvailability,
+          slot_date: dto.date,
+          slot_time: slotTime,
+          is_available: true,
+          session: dto.session,
+        });
 
-      current = current.add(30, 'minute'); // move to next 30-minute block
+        slots.push(slot);
+      }
+
+      current = current.add(30, 'minute');
     }
 
     await this.slotRepo.save(slots);
@@ -102,26 +126,29 @@ export class DoctorService {
     };
   }
 
-  async getAvailableSlots(doctorId: number) {
+  async getAvailableSlots(doctorId: number, page: number, limit: number) {
     const doctor = await this.doctorRepo.findOne({
       where: { doctor_id: doctorId },
     });
-
     if (!doctor) throw new NotFoundException('Doctor not found');
 
-    const slots = await this.slotRepo.find({
+    const today = dayjs().startOf('day').toDate();
+
+    const [slots, total] = await this.slotRepo.findAndCount({
       where: {
         doctor: { doctor_id: doctorId },
         is_available: true,
+        slot_date: MoreThanOrEqual(today), // ✅ Only today or future
       },
       relations: ['availability'],
       order: {
         slot_date: 'ASC',
         slot_time: 'ASC',
       },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
-    // Format the response (group by date, optional)
     const grouped = slots.reduce(
       (acc, slot) => {
         const date = new Date(slot.slot_date).toISOString().split('T')[0];
@@ -134,7 +161,10 @@ export class DoctorService {
 
     return {
       doctor_id: doctorId,
-      available_slots: grouped,
+      total_slots: total,
+      page,
+      limit,
+      data: grouped,
     };
   }
 }
