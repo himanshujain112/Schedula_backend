@@ -25,14 +25,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     profile: any,
     done: VerifyCallback,
   ): Promise<any> {
-    // Pass the Google profile + role to controller
-    const role = req.query.role || 'patient';
+    const role = req.query?.state || 'patient';
+
     const user = {
       email: profile.emails[0].value,
       name: profile.displayName,
       provider: 'google',
       role,
     };
+
     done(null, user);
   }
 }

@@ -33,6 +33,7 @@ import { DoctorAvailability } from './entities/doctor_availablity.entity';
       database: process.env.DB_NAME,
       synchronize: false, // Set to false due to production best practices
       autoLoadEntities: true, // Automatically load entities
+      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     }),
 
     TypeOrmModule.forFeature([

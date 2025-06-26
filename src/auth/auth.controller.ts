@@ -5,6 +5,7 @@ import {
   Headers,
   Post,
   Query,
+  Redirect,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -51,11 +52,18 @@ export class AuthController {
   // Google OAuth endpoints
 
   // This endpoint will redirect to Google for authentication
+
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @Redirect()
   async googleAuth(@Query('role') role: string) {
-    // This endpoint will redirect to Google for authentication
-    // The role will be passed as a query parameter
+    const redirect_uri = process.env.GOOGLE_REDIRECT_URI;
+    const client_id = process.env.GOOGLE_CLIENT_ID;
+    const scope = ['email', 'profile'].join(' ');
+    const state = encodeURIComponent(role || 'patient');
+
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${client_id}&redirect_uri=${redirect_uri}&scope=${scope}&state=${state}`;
+
+    return { url };
   }
 
   // This endpoint will be called by Google after authentication
