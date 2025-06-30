@@ -35,6 +35,9 @@ export class Doctor {
   @Column({ type: 'int', default: 0 })
   experience_years: number;
 
+  @Column({ type: 'enum', enum: ['stream', 'wave'], default: 'stream' })
+  schedule_type: string;
+
   @Column({ type: 'text', nullable: true })
   education: string;
 

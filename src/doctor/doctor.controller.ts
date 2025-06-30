@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -48,5 +49,14 @@ export class DoctorController {
     @Query('limit') limit = 10,
   ) {
     return this.doctorService.getAvailableSlots(doctorId, +page, +limit);
+  }
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('doctor')
+  @Patch(':id/schedule_type')
+  async set_Scheduling_type(
+    @Param('id') doctorId: number,
+    @Body('schedule_type') schedule_type: 'stream' | 'wave',
+  ) {
+    return this.doctorService.setScheduleType(doctorId, schedule_type);
   }
 }

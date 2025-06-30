@@ -23,6 +23,9 @@ export class Timeslot {
   @JoinColumn({ name: 'availability_id' })
   availability: DoctorAvailability;
 
+  @Column({ type: 'int', default: 0 })
+  booked_count: number;
+
   @Column({ type: 'date' })
   slot_date: Date;
 

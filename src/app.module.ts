@@ -16,6 +16,9 @@ import { DoctorController } from './doctor/doctor.controller';
 import { DoctorService } from './doctor/doctor.service';
 import { DoctorModule } from './doctor/doctor.module';
 import { DoctorAvailability } from './entities/doctor_availablity.entity';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { AppointmentsController } from './appointments/appointments.controller';
+import { AppointmentsService } from './appointments/appointments.service';
 
 @Module({
   imports: [
@@ -33,7 +36,8 @@ import { DoctorAvailability } from './entities/doctor_availablity.entity';
       database: process.env.DB_NAME,
       synchronize: false, // Set to false due to production best practices
       autoLoadEntities: true, // Automatically load entities
-      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      ssl:
+        process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     }),
 
     TypeOrmModule.forFeature([
@@ -46,8 +50,9 @@ import { DoctorAvailability } from './entities/doctor_availablity.entity';
     ]),
 
     AuthModule,
-
     DoctorModule,
+    AppointmentsModule,
+    AppointmentsModule,
   ],
 
   controllers: [
@@ -55,7 +60,8 @@ import { DoctorAvailability } from './entities/doctor_availablity.entity';
     AuthController,
     ProfileController,
     DoctorController,
+    AppointmentsController,
   ],
-  providers: [AppService, AuthService, DoctorService],
+  providers: [AppService, AuthService, DoctorService, AppointmentsService],
 })
 export class AppModule {}

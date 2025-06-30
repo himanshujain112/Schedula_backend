@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
+  Req,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateAvailabilityDto } from 'src/dto/availablity.dto';
@@ -166,5 +168,31 @@ export class DoctorService {
       limit,
       data: grouped,
     };
+  }
+
+  // doctor schedule type set (wave/stream)
+
+  async setScheduleType(doctorId: number, schedule_type: 'stream' | 'wave') {
+    const doctor = await this.doctorRepo.findOne({
+      where: { doctor_id: doctorId },
+    });
+
+    if (!doctor) {
+      throw new NotFoundException(`Doctor with id ${doctorId} not found!`);
+    }
+
+    try {
+      doctor.schedule_type = schedule_type;
+
+      await this.doctorRepo.save(doctor);
+      console.log(`schedule type of ${doctorId} updated to ${schedule_type}`);
+      return {
+        message: `Success! Schedule Type updated to ${schedule_type}`,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Error updating schedule type: ${error.message}`,
+      );
+    }
   }
 }

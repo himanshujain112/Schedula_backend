@@ -1,6 +1,9 @@
+import { IsEmail } from 'class-validator';
+
 export class SignupDto {
   first_name: string;
   last_name: string;
+  @IsEmail()
   email: string;
   password?: string;
   specialization?: string; // Optional for patients
