@@ -38,6 +38,12 @@ export class Doctor {
   @Column({ type: 'enum', enum: ['stream', 'wave'], default: 'stream' })
   schedule_type: string;
 
+  @Column({ type: 'int', default: 30 })
+  slot_duration: number; // Total minutes for the time block
+
+  @Column({ type: 'int', default: 3 })
+  patients_per_slot: number; // Only applicable for wave scheduling
+
   @Column({ type: 'text', nullable: true })
   education: string;
 
