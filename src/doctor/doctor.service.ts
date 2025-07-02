@@ -72,6 +72,12 @@ export class DoctorService {
       );
     }
 
+    // Doctor entity update to update patient per slot and session time
+    doctor.patients_per_slot = dto.patients_per_slot || 3;
+    doctor.slot_duration = dto.slot_duration || 30;
+
+    const doc = await this.doctorRepo.save(doctor);
+
     // ✅ 2. Save availability record
     const availability = this.availabilityRepo.create({
       doctor,
@@ -125,6 +131,9 @@ export class DoctorService {
     return {
       message: 'Availability and slots created',
       total_slots: slots.length,
+      schedule_type: doctor.schedule_type,
+      slot_duration: dto.slot_duration,
+      patient_per_slot: dto.patients_per_slot,
     };
   }
 

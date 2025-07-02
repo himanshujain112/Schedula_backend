@@ -26,4 +26,8 @@ export class CreateAvailabilityDto {
     },
   )
   weekday: string;
+
+  slot_duration?: number;
+
+  patients_per_slot?: number;
 }
