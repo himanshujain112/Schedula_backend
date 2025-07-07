@@ -44,6 +44,12 @@ export class Doctor {
   @Column({ type: 'int', default: 3 })
   patients_per_slot: number; // Only applicable for wave scheduling
 
+  @Column({ type: 'time', nullable: true })
+  booking_start_time: string;
+
+  @Column({ type: 'time', nullable: true })
+  booking_end_time: string;
+
   @Column({ type: 'text', nullable: true })
   education: string;
 

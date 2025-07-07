@@ -31,115 +31,132 @@ export class AppointmentsService {
   ) {}
 
   async bookAppointment(dto: CreateAppointmentDto, user: any) {
-  try {
-    const doctor = await this.doctorRepo.findOne({
-      where: { doctor_id: dto.doctor_id },
-    });
-    if (!doctor) throw new NotFoundException('Doctor not found');
+    try {
+      const doctor = await this.doctorRepo.findOne({
+        where: { doctor_id: dto.doctor_id },
+      });
+      if (!doctor) throw new NotFoundException('Doctor not found');
 
-    const patient = await this.patientRepo.findOne({
-      where: { user: { user_id: user.sub } },
-    });
-    if (!patient) throw new NotFoundException('Patient not found');
+      // Check booking window
+      if (doctor.booking_start_time && doctor.booking_end_time) {
+        const currentTime = dayjs().format('HH:mm');
+        const bookingStart = doctor.booking_start_time;
+        const bookingEnd = doctor.booking_end_time;
 
-    const slotDate = new Date(dto.date);
+        if (currentTime < bookingStart || currentTime > bookingEnd) {
+          throw new ForbiddenException(
+            `Booking is only allowed between ${bookingStart} and ${bookingEnd}`,
+          );
+        }
+      }
 
-    const slot = await this.slotRepo.findOne({
-      where: {
-        doctor: { doctor_id: dto.doctor_id },
-        slot_date: slotDate,
-        slot_time: dto.start_time,
-        session: dto.session,
-      },
-    });
-    if (!slot) throw new NotFoundException('Slot not found');
+      const patient = await this.patientRepo.findOne({
+        where: { user: { user_id: user.sub } },
+      });
+      if (!patient) throw new NotFoundException('Patient not found');
 
-    // Check for existing session booking
-    const existingAppointments = await this.appointmentRepo.find({
-      where: {
-        doctor: { doctor_id: dto.doctor_id },
-        patient: { patient_id: patient.patient_id },
-        appointment_date: slotDate,
-      },
-    });
+      const slotDate = new Date(dto.date);
 
-    for (const app of existingAppointments) {
-      const existingSlot = await this.slotRepo.findOne({
+      const slot = await this.slotRepo.findOne({
         where: {
           doctor: { doctor_id: dto.doctor_id },
           slot_date: slotDate,
-          slot_time: app.time_slot,
+          slot_time: dto.start_time,
+          session: dto.session,
         },
       });
+      if (!slot) throw new NotFoundException('Slot not found');
 
-      if (existingSlot?.session === dto.session) {
-        throw new ConflictException(
-          'You already have an appointment in this session with this doctor on this date.',
-        );
-      }
-    }
-
-    // Determine reporting time
-    let reportingTime = dto.start_time; // default for stream
-
-    if (doctor.schedule_type === 'stream') {
-      if (!slot.is_available) {
-        throw new ConflictException('Slot already booked');
-      }
-
-      slot.is_available = false;
-      await this.slotRepo.save(slot);
-    }
-
-    if (doctor.schedule_type === 'wave') {
-      const count = await this.appointmentRepo.count({
+      // Check for existing session booking
+      const existingAppointments = await this.appointmentRepo.find({
         where: {
           doctor: { doctor_id: dto.doctor_id },
+          patient: { patient_id: patient.patient_id },
           appointment_date: slotDate,
-          time_slot: dto.start_time,
         },
       });
 
-      if (count >= doctor.patients_per_slot) {
-        throw new ConflictException('Wave limit reached for this slot');
+      for (const app of existingAppointments) {
+        const existingSlot = await this.slotRepo.findOne({
+          where: {
+            doctor: { doctor_id: dto.doctor_id },
+            slot_date: slotDate,
+            slot_time: app.time_slot,
+          },
+        });
+
+        if (existingSlot?.session === dto.session) {
+          throw new ConflictException(
+            'You already have an appointment in this session with this doctor on this date.',
+          );
+        }
       }
 
-      const subSlotMinutes = Math.floor(
-        doctor.slot_duration / doctor.patients_per_slot,
+      // Determine reporting time and update slot booking count
+      let reportingTime = dto.start_time; // default for stream
+
+      if (doctor.schedule_type === 'stream') {
+        if (!slot.is_available) {
+          throw new ConflictException('Slot already booked');
+        }
+
+        slot.is_available = false;
+        slot.booked_count = 1;
+        await this.slotRepo.save(slot);
+      }
+
+      if (doctor.schedule_type === 'wave') {
+        const count = await this.appointmentRepo.count({
+          where: {
+            doctor: { doctor_id: dto.doctor_id },
+            appointment_date: slotDate,
+            time_slot: dto.start_time,
+          },
+        });
+
+        if (count >= doctor.patients_per_slot) {
+          throw new ConflictException('Wave limit reached for this slot');
+        }
+
+        const subSlotMinutes = Math.floor(
+          doctor.slot_duration / doctor.patients_per_slot,
+        );
+
+        reportingTime = dayjs(`${dto.date}T${dto.start_time}`)
+          .add(count * subSlotMinutes, 'minute')
+          .format('HH:mm');
+
+        // Update booked count
+        slot.booked_count = count + 1;
+        await this.slotRepo.save(slot);
+      }
+
+      // Save appointment
+      const appointment = this.appointmentRepo.create({
+        doctor,
+        patient,
+        appointment_date: slotDate,
+        time_slot: dto.start_time,
+        reporting_time: reportingTime,
+        appointment_status: 'pending',
+        reason: dto.reason || 'Checkup',
+        notes: dto.notes || '',
+      });
+
+      await this.appointmentRepo.save(appointment);
+
+      return {
+        message: 'Appointment booked successfully',
+        schedule_type: doctor.schedule_type,
+        reporting_time: reportingTime,
+      };
+    } catch (error) {
+      console.error('Error booking appointment:', error);
+      throw new InternalServerErrorException(
+        error.message || 'Something went wrong during booking',
       );
-
-      reportingTime = dayjs(`${dto.date}T${dto.start_time}`)
-        .add(count * subSlotMinutes, 'minute')
-        .format('HH:mm');
     }
-
-    // Save appointment
-    const appointment = this.appointmentRepo.create({
-      doctor,
-      patient,
-      appointment_date: slotDate,
-      time_slot: dto.start_time,
-      reporting_time: reportingTime,
-      appointment_status: 'pending',
-      reason: dto.reason || 'Checkup',
-      notes: dto.notes || '',
-    });
-
-    await this.appointmentRepo.save(appointment);
-
-    return {
-      message: 'Appointment booked successfully',
-      schedule_type: doctor.schedule_type,
-      reporting_time: reportingTime,
-    };
-  } catch (error) {
-    console.error('Error booking appointment:', error);
-    throw new InternalServerErrorException(
-      error.message || 'Something went wrong during booking',
-    );
   }
-}
-
 
   async view_appointments(user: any) {
     const today = new Date();

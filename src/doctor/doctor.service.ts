@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -12,6 +14,10 @@ import { MoreThanOrEqual, Repository } from 'typeorm';
 import * as dayjs from 'dayjs';
 import { Timeslot } from 'src/entities/timeslot.entity';
 import { DoctorAvailability } from 'src/entities/doctor_availablity.entity';
+import { UpdateTimeSlotDto } from 'src/dto/update_time_slot.dto';
+import { CreateManualSlotDto } from 'src/dto/manual_slot.dto';
+import { SetBookingWindowDto } from 'src/dto/booking_window.dto';
+import { Appointment } from 'src/entities/appointment.entity';
 
 @Injectable()
 export class DoctorService {
@@ -24,6 +30,9 @@ export class DoctorService {
 
     @InjectRepository(DoctorAvailability)
     private availabilityRepo: Repository<DoctorAvailability>,
+
+    @InjectRepository(Appointment)
+    private appointmentRepo: Repository<Appointment>,
   ) {}
 
   async getDoctors(name?: string, specialization?: string) {
@@ -123,7 +132,17 @@ export class DoctorService {
         slots.push(slot);
       }
 
-      current = current.add(30, 'minute');
+      current = current.add(
+        dto.slot_duration || doctor.slot_duration,
+        'minute',
+      );
+    }
+
+    // Ensure at least one slot is created
+    if (slots.length === 0) {
+      throw new BadRequestException(
+        'At least one slot must be created within the availability session',
+      );
     }
 
     await this.slotRepo.save(slots);
@@ -203,5 +222,237 @@ export class DoctorService {
         `Error updating schedule type: ${error.message}`,
       );
     }
+  }
+
+  async deleteTimeSlot(user_id: number, doctorId: number, slotId: number) {
+    // 1. Find the doctor making the request
+    const doctor = await this.doctorRepo.findOne({
+      where: { user: { user_id: user_id } },
+    });
+
+    if (!doctor) {
+      throw new NotFoundException(
+        'Doctor profile not found for the logged-in user.',
+      );
+    }
+
+    // 2. Verify doctor ID matches
+    if (doctor.doctor_id !== doctorId) {
+      throw new ForbiddenException(
+        'You are not authorized to access this doctor profile.',
+      );
+    }
+
+    // 2. Find the time slot to be deleted
+    const timeSlot = await this.slotRepo.findOne({
+      where: { slot_id: slotId },
+      relations: ['doctor'], // We need to load the doctor to check ownership
+    });
+
+    if (!timeSlot) {
+      throw new NotFoundException(`Time slot with ID ${slotId} not found.`);
+    }
+
+    // 3. Authorization Check: Ensure the doctor owns this time slot
+    if (timeSlot.doctor.doctor_id !== doctor.doctor_id) {
+      throw new ForbiddenException(
+        'You are not authorized to delete this time slot.',
+      );
+    }
+
+    // 4. Validation Check: Check if any appointments exist in this session
+    const appointmentsInSession = await this.checkAppointmentsInSession(
+      doctor.doctor_id,
+      timeSlot.slot_date,
+      timeSlot.session,
+    );
+
+    if (appointmentsInSession) {
+      throw new ConflictException(
+        'You cannot modify this slot because an appointment is already booked in this session.',
+      );
+    }
+
+    // 5. If all checks pass, delete the slot
+    await this.slotRepo.remove(timeSlot);
+
+    return { message: `Time slot ${slotId} has been successfully deleted.` };
+  }
+
+  async updateTimeSlot(
+    user_id: number,
+    doctorId: number,
+    slotId: number,
+    dto: UpdateTimeSlotDto,
+  ) {
+    // 1. Find the doctor making the request
+    const doctor = await this.doctorRepo.findOne({
+      where: { user: { user_id: user_id } },
+    });
+    if (!doctor) {
+      throw new NotFoundException('Doctor profile not found.');
+    }
+
+    // 2. Verify doctor ID matches
+    if (doctor.doctor_id !== doctorId) {
+      throw new ForbiddenException(
+        'You are not authorized to access this doctor profile.',
+      );
+    }
+
+    // 2. Find the time slot to be edited
+    const timeSlot = await this.slotRepo.findOne({
+      where: { slot_id: slotId },
+      relations: ['doctor'],
+    });
+    if (!timeSlot) {
+      throw new NotFoundException(`Time slot with ID ${slotId} not found.`);
+    }
+
+    // 3. Authorization Check
+    if (timeSlot.doctor.doctor_id !== doctor.doctor_id) {
+      throw new ForbiddenException(
+        'You are not authorized to edit this time slot.',
+      );
+    }
+
+    // 4. Validation Check: Check if any appointments exist in this session
+    const appointmentsInSession = await this.checkAppointmentsInSession(
+      doctor.doctor_id,
+      timeSlot.slot_date,
+      timeSlot.session,
+    );
+
+    if (appointmentsInSession) {
+      throw new ConflictException(
+        'You cannot modify this slot because an appointment is already booked in this session.',
+      );
+    }
+
+    // 5. Update the slot and save
+    Object.assign(timeSlot, dto); // Merge new start/end times
+    const updatedSlot = await this.slotRepo.save(timeSlot);
+
+    return {
+      message: `Time slot ${slotId} has been successfully updated.`,
+      slot: updatedSlot,
+    };
+  }
+
+  async createManualSlot(doctorId: number, dto: CreateManualSlotDto) {
+    const doctor = await this.doctorRepo.findOne({
+      where: { doctor_id: doctorId },
+    });
+
+    if (!doctor) throw new NotFoundException('Doctor not found');
+
+    // Validate date is not in the past
+    const today = dayjs().startOf('day');
+    const requestedDate = dayjs(dto.date);
+    if (requestedDate.isBefore(today)) {
+      throw new BadRequestException('Cannot create slot for a past date');
+    }
+
+    // Check if slot already exists
+    const existingSlot = await this.slotRepo.findOne({
+      where: {
+        doctor: { doctor_id: doctorId },
+        slot_date: new Date(dto.date),
+        slot_time: dto.start_time,
+      },
+    });
+
+    if (existingSlot) {
+      throw new ConflictException('Slot already exists for this time');
+    }
+
+    // Calculate slot duration
+    const start = dayjs(`${dto.date}T${dto.start_time}`);
+    const end = dayjs(`${dto.date}T${dto.end_time}`);
+    const slotDuration = end.diff(start, 'minute');
+
+    // Create the slot
+    const slot = this.slotRepo.create({
+      doctor,
+      slot_date: dto.date,
+      slot_time: dto.start_time,
+      is_available: true,
+      session: dto.session,
+      booked_count: 0,
+    });
+
+    await this.slotRepo.save(slot);
+
+    // Update doctor's slot settings
+    doctor.slot_duration = slotDuration;
+    doctor.patients_per_slot = dto.patients_per_slot;
+    await this.doctorRepo.save(doctor);
+
+    return {
+      message: 'Manual slot created successfully',
+      slot_duration: slotDuration,
+      patients_per_slot: dto.patients_per_slot,
+    };
+  }
+
+  async setBookingWindow(doctorId: number, dto: SetBookingWindowDto) {
+    const doctor = await this.doctorRepo.findOne({
+      where: { doctor_id: doctorId },
+    });
+
+    if (!doctor) throw new NotFoundException('Doctor not found');
+
+    // Validate that start time is before end time
+    const startTime = dayjs(`2000-01-01T${dto.booking_start_time}`);
+    const endTime = dayjs(`2000-01-01T${dto.booking_end_time}`);
+
+    if (startTime.isAfter(endTime)) {
+      throw new BadRequestException(
+        'Booking start time must be before end time',
+      );
+    }
+
+    doctor.booking_start_time = dto.booking_start_time;
+    doctor.booking_end_time = dto.booking_end_time;
+
+    await this.doctorRepo.save(doctor);
+
+    return {
+      message: 'Booking window updated successfully',
+      booking_start_time: dto.booking_start_time,
+      booking_end_time: dto.booking_end_time,
+    };
+  }
+
+  // Helper method to check appointments in session
+  private async checkAppointmentsInSession(
+    doctorId: number,
+    date: Date,
+    session: string,
+  ): Promise<boolean> {
+    const appointments = await this.appointmentRepo.find({
+      where: {
+        doctor: { doctor_id: doctorId },
+        appointment_date: date,
+      },
+      relations: ['doctor'],
+    });
+
+    // Check if any appointment exists in the same session
+    for (const appointment of appointments) {
+      const appointmentSlot = await this.slotRepo.findOne({
+        where: {
+          doctor: { doctor_id: doctorId },
+          slot_date: date,
+          slot_time: appointment.time_slot,
+        },
+      });
+
+      if (appointmentSlot?.session === session) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
